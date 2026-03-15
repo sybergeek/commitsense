@@ -1,13 +1,20 @@
 {
   "name": "commitsense",
-  "displayName": "commitsense",
-  "description": "Git intent analyzer for commits",
+  "displayName": "CommitSense",
+  "description": "Analyze commit intent and detect risky changes",
   "version": "0.0.1",
+  "publisher": "sybergeek",
   "engines": {
     "vscode": "^1.110.0"
   },
   "categories": [
-    "Other"
+    "SCM Providers"
+  ],
+  "keywords": [
+    "git",
+    "commit",
+    "analysis",
+    "productivity"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -28,8 +35,8 @@
         "title": "CommitSense: Show Impact"
       },
       {
-        "command": "commitsense.openSummaryPanel",
-        "title": "CommitSense: Open Summary Panel"
+        "command": "commitsense.generateCommitMessage",
+        "title": "CommitSense: Generate Commit Message"
       }
     ]
   },
