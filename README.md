@@ -8,6 +8,11 @@ CommitSense is a VS Code extension that analyzes Git changes and predicts commit
 - Inline CodeLens actions at the top of files:
 	- `CommitSense: Analyze Latest Commit`
 	- `CommitSense: Open Summary Panel`
+ - Commit Narrative Generator:
+	 - Suggests concise conventional-commit messages for staged changes.
+	 - Offered when editing `COMMIT_EDITMSG` or via command.
+ - Change Heatmap:
+	 - Colorizes changed hunks by per-hunk risk (green/yellow/red) using editor decorations.
 - Command-based analysis with confidence percentage and score breakdown.
 - Summary side panel with intent, confidence, reason, signals, impact, and score details.
 - Live preview refresh on save using current Git changes:
@@ -39,6 +44,9 @@ It then computes:
 - `commitsense.openSummaryPanel`
 	- Title: `CommitSense: Open Summary Panel`
 	- Opens a webview panel with detailed analysis.
+ - `commitsense.generateCommitMessage`
+    - Title: `CommitSense: Generate Commit Message`
+    - Generates a suggested conventional-commit subject and body for staged changes; can insert into the commit editor or copy to clipboard.
 
 ## Requirements
 
@@ -56,6 +64,11 @@ It then computes:
 	 - Click `CommitSense: Open Summary Panel` CodeLens.
 	 - Run `CommitSense: Analyze Commit Intent` from command search.
 3. Save files to refresh the live summary panel automatically.
+
+Additional usage tips:
+
+- Open the `COMMIT_EDITMSG` buffer during an interactive commit — CommitSense will offer a suggested commit message to insert or preview.
+- Run `CommitSense: Generate Commit Message` to create a suggestion for currently staged changes and copy or insert it into a commit buffer.
 
 ## Extension Settings
 
@@ -78,6 +91,12 @@ This extension currently does not contribute user-facing settings.
 - Added summary webview panel and live analysis refresh on save.
 
 ---
+
+## Unreleased (master)
+
+- Commit Narrative Generator: suggests conventional-commit style messages for staged changes and offers to insert/preview suggestions when `COMMIT_EDITMSG` is opened.
+- Change Heatmap: per-hunk risk coloring (green/yellow/red) applied to changed hunks in the editor using decorations.
+- Per-hunk risk heuristics power the heatmap and can be surfaced via hover/tooltips in a future update.
 
 ## Development
 

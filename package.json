@@ -22,6 +22,14 @@
       {
         "command": "commitsense.openSummaryPanel",
         "title": "CommitSense: Open Summary Panel"
+      },
+      {
+        "command": "commitsense.showImpact",
+        "title": "CommitSense: Show Impact"
+      },
+      {
+        "command": "commitsense.openSummaryPanel",
+        "title": "CommitSense: Open Summary Panel"
       }
     ]
   },

@@ -9,6 +9,13 @@ export type CommitIntentAnalysisResult = {
     impact: {
         fileCount: number;
     };
+    risk: 'LOW' | 'MEDIUM' | 'HIGH';
+    riskReasons: string[];
+};
+
+export type HunkRisk = {
+    risk: 'LOW' | 'MEDIUM' | 'HIGH';
+    reasons: string[];
 };
 
 const INTENT_LABELS: Record<IntentKey, string> = {
@@ -31,6 +38,82 @@ export function analyzeIntent(diff: string): {
         confidence: result.confidence,
         scores: result.scores
     };
+}
+
+export function assessHunkRisk(hunkDiff: string, nameStatus: string): HunkRisk {
+    const reasons: string[] = [];
+    const removedTryCatch = countMatches(hunkDiff, /(^-.*\btry\b|^-.*\bcatch\b)/gm);
+    const removedThrow = countMatches(hunkDiff, /(^-.*\bthrow\b)/gm);
+    const functionSignatureChanges = countMatches(hunkDiff, /\bfunction\s+\w+\(/g);
+    const arrowChanges = countMatches(hunkDiff, /=>/g);
+
+    if (removedTryCatch + removedThrow > 0) {
+        reasons.push('removed error-handling (try/catch/throw)');
+    }
+
+    if (functionSignatureChanges >= 1) {
+        reasons.push('function signature change');
+    }
+
+    if (arrowChanges > 3) {
+        reasons.push('many arrow/function style changes');
+    }
+
+    // simple file-level hints from nameStatus for this hunk (best-effort)
+    const lower = nameStatus.toLowerCase();
+    if (/auth|payment|service|controller|api|public/.test(lower)) {
+        reasons.push('touches critical file(s)');
+    }
+
+    let risk: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+    if (reasons.length === 0) {
+        risk = 'LOW';
+    } else {
+        const severe = reasons.some((r) => /removed error-handling|critical/.test(r));
+        if (severe || removedTryCatch + removedThrow >= 2) {
+            risk = 'HIGH';
+        } else {
+            risk = 'MEDIUM';
+        }
+    }
+
+    return { risk, reasons };
+}
+
+export function generateCommitMessageFromAnalysis(analysis: CommitIntentAnalysisResult): string {
+    const prefixMap: Record<string, string> = {
+        'Bug Fix': 'fix',
+        'Feature': 'feat',
+        'Refactor': 'refactor',
+        'Docs': 'docs',
+        'Formatting': 'style'
+    };
+
+    const prefix = prefixMap[analysis.intent] ?? 'chore';
+
+    // construct a short subject from reason/signals
+    const short = (() => {
+        if (analysis.signals && analysis.signals.length > 0) {
+            // take first meaningful signal and trim
+            const sig = analysis.signals[0];
+            // remove `commit message:` prefix if present
+            return sig.replace(/^commit message:\s*/i, '').slice(0, 60).trim();
+        }
+        // fallback to reason
+        return analysis.reason.slice(0, 60);
+    })();
+
+    const subject = `${prefix}: ${short || analysis.intent.toLowerCase()}`;
+
+    // optional body with confidence and signals
+    const bodyLines = [] as string[];
+    bodyLines.push(analysis.reason);
+    bodyLines.push(`Confidence: ${analysis.confidence}%`);
+    if (analysis.signals && analysis.signals.length > 0) {
+        bodyLines.push('Signals: ' + analysis.signals.join(', '));
+    }
+
+    return `${subject}\n\n${bodyLines.join('\n')}`;
 }
 
 export function analyzeCommitIntent(input: {
@@ -78,6 +161,7 @@ export function analyzeCommitIntent(input: {
         fileCount: getChangedFileCount(input.nameStatus)
     };
     const reason = buildReason(bestIntent, input, signals);
+    const { risk, riskReasons } = assessRisk({ input, scores, signals, impact });
 
     return {
         intent: INTENT_LABELS[bestIntent],
@@ -86,7 +170,83 @@ export function analyzeCommitIntent(input: {
         reason,
         signals,
         impact
+        ,
+        risk,
+        riskReasons
     };
+}
+
+function assessRisk({
+    input,
+    scores,
+    signals,
+    impact
+}: {
+    input: { diff: string; nameStatus: string; message: string };
+    scores: IntentScores;
+    signals: string[];
+    impact: { fileCount: number };
+}): { risk: 'LOW' | 'MEDIUM' | 'HIGH'; riskReasons: string[] } {
+    const reasons: string[] = [];
+    const diff = input.diff;
+    const nameStatusLines = input.nameStatus
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+    const renameCount = nameStatusLines.filter((l) => l.startsWith('R')).length;
+    const removedTryCatch = countMatches(diff, /(^-.*\btry\b|^-.*\bcatch\b)/gm);
+    const removedThrow = countMatches(diff, /(^-.*\bthrow\b)/gm);
+    const functionSignatureChanges = countMatches(diff, /\bfunction\s+\w+\(/g);
+    const arrowChanges = countMatches(diff, /=>/g);
+
+    // Critical service / public API indicators from file names
+    const criticalFiles = nameStatusLines.filter((line) =>
+        /auth|payment|service|controller|api|public/i.test(line)
+    ).length;
+
+    // High-risk conditions
+    if (removedTryCatch + removedThrow > 0) {
+        reasons.push('removed error-handling (try/catch/throw)');
+    }
+
+    if (renameCount >= 3) {
+        reasons.push(`multiple renames (${renameCount})`);
+    }
+
+    if (criticalFiles > 0) {
+        reasons.push(`modified critical files (${criticalFiles})`);
+    }
+
+    if ((scores.refactor >= 8 || renameCount >= 2) && impact.fileCount >= 4) {
+        reasons.push('large refactor across multiple files');
+    }
+
+    if (functionSignatureChanges >= 2) {
+        reasons.push('multiple function signature changes');
+    }
+
+    if (arrowChanges > 5) {
+        reasons.push('many arrow/function style changes (possible bulk refactor)');
+    }
+
+    // Decide risk level
+    let risk: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+    if (reasons.length === 0) {
+        // fallback heuristics
+        if (scores.bugfix >= 6) { risk = 'MEDIUM'; }
+        if (scores.refactor >= 9 && impact.fileCount >= 3) { risk = 'MEDIUM'; }
+    } else {
+        // escalate based on severity
+        const severe = reasons.some((r) => /removed error-handling|critical|large refactor/.test(r));
+        if (severe || renameCount >= 3 || removedTryCatch + removedThrow >= 2) {
+            risk = 'HIGH';
+        } else {
+            risk = 'MEDIUM';
+        }
+    }
+
+    return { risk, riskReasons: reasons };
 }
 
 function buildReason(

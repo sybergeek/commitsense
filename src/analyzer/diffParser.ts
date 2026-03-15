@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 export type ChangedHunk = {
 	startLine: number;
 	endLine: number;
+	diffText?: string;
 };
 
 type ParsedFileDiff = {
@@ -29,11 +30,15 @@ function parseDiffByFile(diff: string): ParsedFileDiff[] {
 	const files: ParsedFileDiff[] = [];
 	let currentFile: ParsedFileDiff | undefined;
 
-	for (const line of diff.split('\n')) {
+	const lines = diff.split('\n');
+	let i = 0;
+	while (i < lines.length) {
+		const line = lines[i];
 		if (line.startsWith('diff --git ')) {
 			const match = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
 			if (!match) {
 				currentFile = undefined;
+				i++;
 				continue;
 			}
 
@@ -42,34 +47,48 @@ function parseDiffByFile(diff: string): ParsedFileDiff[] {
 				hunks: []
 			};
 			files.push(currentFile);
+			i++;
 			continue;
 		}
+		if (!currentFile) { i++; continue; }
 
-		if (!currentFile || !line.startsWith('@@')) {
-			continue;
-		}
+		if (!line.startsWith('@@')) { i++; continue; }
 
 		const hunkMatch = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-		if (!hunkMatch) {
-			continue;
-		}
+		if (!hunkMatch) { i++; continue; }
 
 		const newStartLine = Number(hunkMatch[1]);
 		const newLineCount = hunkMatch[2] ? Number(hunkMatch[2]) : 1;
+
+		// collect raw hunk lines (starting at @@ until next @@ or diff --git)
+		const hunkLines: string[] = [];
+		hunkLines.push(line);
+		let j = i + 1;
+		while (j < lines.length && !lines[j].startsWith('diff --git ') && !lines[j].startsWith('@@')) {
+			hunkLines.push(lines[j]);
+			j++;
+		}
+
+		const hunkDiffText = hunkLines.join('\n');
 
 		if (newLineCount === 0) {
 			const anchorLine = Math.max(newStartLine - 1, 0);
 			currentFile.hunks.push({
 				startLine: anchorLine,
-				endLine: anchorLine
+				endLine: anchorLine,
+				diffText: hunkDiffText
 			});
+			i = j;
 			continue;
 		}
 
 		currentFile.hunks.push({
 			startLine: Math.max(newStartLine - 1, 0),
-			endLine: Math.max(newStartLine + newLineCount - 2, 0)
+			endLine: Math.max(newStartLine + newLineCount - 2, 0),
+			diffText: hunkDiffText
 		});
+
+		i = j;
 	}
 
 	return files;
