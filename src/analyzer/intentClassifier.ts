@@ -66,9 +66,9 @@ export function classifyIntent(diff: string): {
 	// Cap each signal contribution so very large diffs cannot dominate scores.
 	scores.bugfix += Math.min(bugTryCatchSignals * 2, 5);
 	scores.bugfix += Math.min(bugIfThrowSignals, 5);
-	scores.feature += Math.min(featureFunctionClassSignals * 2, 6);
+	scores.feature += Math.min(Math.floor(featureFunctionClassSignals * 1.5), 4);
 	scores.feature += Math.min(featureTodoSignals, 3);
-	scores.feature += Math.min(featureFunctionSignatureSignals * 2, 6);
+	scores.feature += Math.min(featureFunctionSignatureSignals * 1, 4);
 	scores.refactor += Math.min(refactorRenameArrowSignals * 3, 9);
 	scores.docs += Math.min(docsSignals * 2, 6);
 
@@ -76,7 +76,8 @@ export function classifyIntent(diff: string): {
 		(a, b) => b[1] - a[1]
 	)[0][0] ?? 'refactor') as IntentKey;
 	const maxScore = Math.max(...Object.values(scores));
-	const confidence = Math.min(Math.round((maxScore / 10) * 100), 100);
+	// normalize against a slightly larger scale to avoid overly confident defaults
+	const confidence = Math.min(Math.round((maxScore / 12) * 100), 100);
 
 	return {
 		intent: bestIntent,

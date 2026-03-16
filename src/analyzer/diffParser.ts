@@ -17,8 +17,9 @@ export function getChangedHunksForDocument(
 	document: vscode.TextDocument,
 	workspaceFolder: vscode.WorkspaceFolder
 ): ChangedHunk[] {
+	const docPath = document.uri.fsPath && document.uri.fsPath.length > 0 ? document.uri.fsPath : document.uri.path;
 	const relativePath = normalizePath(
-		path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath)
+		path.relative(workspaceFolder.uri.fsPath, docPath)
 	);
 	const parsedFiles = parseDiffByFile(diff);
 	const matchedFile = parsedFiles.find((file) => file.filePath === relativePath);
